@@ -165,6 +165,13 @@ archive. Select the last successful BtbN build of a completed month from its
 release list: these are retained for two years, while ordinary daily builds
 expire quickly. A tag's calendar date alone cannot establish retention.
 
+The official LeRobot loader test is also opt-in (`HFLOW_LEROBOT_TESTS=1`) and
+requires a separate environment; see the setup commands in
+[the export example](./examples/README.md#exporting-a-curated-selection-back-to-lerobot-dataset-v3).
+The `lerobot-loader` workflow checks pinned and latest LeRobot daily and on PRs
+touching the exporter, its tests, or that workflow, and supports manual dispatch.
+Default CI keeps this test skipped.
+
 The MediaPipe one brings its own OpenCV, and the OpenCV wheels share one
 `cv2/` directory, so syncing back out can leave `import cv2` broken while
 `uv sync` still calls the environment correct. One command puts it back:

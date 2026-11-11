@@ -512,6 +512,10 @@ HFLOW_LEROBOT_TESTS=1 HF_HUB_OFFLINE=1 \
 
 The test requires no dataset download and stays skipped in default CI. LeRobot
 and PyTorch are not project dependencies.
+The `lerobot-loader` workflow runs pinned and latest LeRobot checks daily at
+05:41 UTC and on PRs that change the exporter, its tests, or the workflow.
+To trigger it by hand, select `lerobot-loader` in GitHub Actions and choose
+**Run workflow**.
 
 From a curation manifest:
 

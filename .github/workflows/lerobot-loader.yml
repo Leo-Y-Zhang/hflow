@@ -1,0 +1,82 @@
+name: lerobot-loader
+
+on:
+  schedule:
+    - cron: "41 5 * * *" # Daily at 05:41 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "examples/lerobot/**"
+      - "tests/test_lerobot_loader.py"
+      - "tests/test_lerobot_export.py"
+      - "tests/lerobot_test_helpers.py"
+      - ".github/workflows/lerobot-loader.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  loader:
+    name: Official loader (${{ matrix.lerobot }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: false
+    strategy:
+      fail-fast: false
+      matrix:
+        lerobot: [pinned, latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install ffmpeg (the test suite pins to the system binary)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.11"
+          enable-cache: false
+      - name: Sync project environment
+        run: uv sync --locked
+      - name: Create isolated loader environment
+        run: uv venv data/lerobot-loader --python 3.12
+      - name: Install pinned loader
+        if: matrix.lerobot == 'pinned'
+        # examples/README.md is the source for these pinned install commands.
+        run: |
+          uv --no-config pip install --python data/lerobot-loader/bin/python \
+            torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
+          uv --no-config pip install --python data/lerobot-loader/bin/python lerobot==0.4.4 pytest
+      - name: Install latest loader with compatible CPU PyTorch
+        if: matrix.lerobot == 'latest'
+        # Resolve PyTorch with LeRobot instead of retaining the pinned leg's versions.
+        # Newer releases make the dataset loader's dependencies an optional extra.
+        run: |
+          uv --no-config pip install --python data/lerobot-loader/bin/python \
+            --torch-backend cpu "lerobot[dataset]" pytest
+      - name: Load exports and require every case to pass
+        env:
+          HFLOW_LEROBOT_TESTS: "1"
+          HF_HUB_OFFLINE: "1"
+        run: |
+          HFLOW_EXPORT_PYTHON="$PWD/.venv/bin/python" \
+            data/lerobot-loader/bin/python -m pytest -q -rs tests/test_lerobot_loader.py \
+            --junitxml=data/lerobot-loader/results.xml
+          data/lerobot-loader/bin/python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          report = ET.parse("data/lerobot-loader/results.xml")
+          cases = list(report.iter("testcase"))
+          skipped = len(list(report.iter("skipped")))
+          failed = len(list(report.iter("failure"))) + len(list(report.iter("error")))
+          passed = len(cases) - skipped - failed
+          # Keep in sync with the two task_ids cases in test_lerobot_loader.py.
+          if (passed, skipped, failed) != (2, 0, 0):
+              raise SystemExit(
+                  f"Expected 2 passed, 0 skipped, 0 failed; got {passed}, {skipped}, {failed}"
+              )
+          print("Loader guard: 2 passed, 0 skipped, 0 failed")
+          PY
