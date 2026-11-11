@@ -493,6 +493,21 @@ task registry. It retains the source schemas and complete feature registry from
 v3. Regenerate earlier exports for official loader compatibility. This does not
 change HFlow's canonical episode format or transform behavior version.
 
+The standalone verifier accepts `--source <cache-directory>` to compare every
+selected source row, Arrow schema (including metadata), task string, and camera
+window. The documented workflow supplies its revision-keyed cache automatically,
+fetches the source task registry into it, and fails on content mismatches. `export-provenance.json` supplies the episode
+mapping; missing or incomplete provenance fails closed. Floats compare exactly,
+with matching NaNs accepted. The only remapped data columns are `episode_index`
+(selection position), `index` (global frame number starting at zero), and
+`frame_index` (episode-local frame number starting at zero). Task IDs must match.
+The summary counts distinct compared and remapped columns across all episodes.
+
+```bash
+uv run python examples/lerobot/verify.py data/curated_lerobot --expect 0,1 \
+  --source data/lerobot_workflow/_lerobot_cache/<commit-sha>
+```
+
 The opt-in compatibility test exports real tiny MP4s and reads metadata, camera
 tensors, and a complete episode with LeRobot 0.4.4 (dataset format v3.0) using its
 PyAV video backend. Keep its older Hub SDK requirements in a separate environment; `HFLOW_EXPORT_PYTHON`
@@ -507,10 +522,32 @@ uv --no-config pip install --python data/lerobot-loader/bin/python \
 uv --no-config pip install --python data/lerobot-loader/bin/python lerobot==0.4.4 pytest
 HFLOW_LEROBOT_TESTS=1 HF_HUB_OFFLINE=1 \
   HFLOW_EXPORT_PYTHON="$PWD/.venv/bin/python" \
-  data/lerobot-loader/bin/python -m pytest -q tests/test_lerobot_loader.py
+  data/lerobot-loader/bin/python -m pytest -q -s \
+  tests/test_lerobot_loader.py tests/test_lerobot_roundtrip.py
 ```
 
-The test requires no dataset download and stays skipped in default CI. LeRobot
+The synthetic round-trip test compares every camera tensor with `torch.equal`
+for a reordered selection `[1, 0]`, with distinct frames and cameras. It first
+tries the official source loader with the same PyAV backend. For partial source
+caches it decodes the source MP4 with PyAV, using source timestamps and the
+loader's RGB, CHW, float32 / 255 conversion; the test prints which path it used.
+There is no pixel tolerance or exception for window-edge mismatches.
+
+The public test additionally needs `HFLOW_NETWORK_TESTS=1` and downloads three
+commit-pinned corpora (episodes 0–2, all declared cameras). Unset
+`HF_HUB_OFFLINE` before running it. Downloads and outputs stay in pytest's
+working directory; use `--basetemp data/lerobot-public` to keep them under `data/`
+(this directory is cleared by pytest on each run). The test prints elapsed time,
+source-cache bytes, and camera-frame counts. Cache bytes exclude HTTP overhead.
+
+```bash
+HFLOW_LEROBOT_TESTS=1 HFLOW_NETWORK_TESTS=1 \
+  HFLOW_EXPORT_PYTHON="$PWD/.venv/bin/python" \
+  data/lerobot-loader/bin/python -m pytest -q -s \
+  tests/test_lerobot_roundtrip.py -k public --basetemp data/lerobot-public
+```
+
+The synthetic tests require no dataset download and stay skipped in default CI. LeRobot
 and PyTorch are not project dependencies.
 The `lerobot-loader` workflow runs pinned and latest LeRobot checks daily at
 05:41 UTC and on PRs that change the exporter, its tests, or the workflow.

@@ -47,7 +47,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from examples.lerobot.export import export  # noqa: E402
+from examples.lerobot.export import _fetch_task_registry, export  # noqa: E402
 
 
 def curation_policy_sql(cameras: Sequence[str]) -> str:
@@ -192,7 +192,7 @@ def run_v3_export(data_dir: Path, manifest_path: Path, cameras: Sequence[str]) -
     return destination
 
 
-def run_verify(v3_dir: Path, expected_episodes: Sequence[int]) -> None:
+def run_verify(v3_dir: Path, expected_episodes: Sequence[int], source_root: Path) -> None:
     """Verify the exported repository in a clean process (no HFlow import)."""
     verify_script = Path(__file__).with_name("verify.py")
     subprocess.run(
@@ -200,6 +200,8 @@ def run_verify(v3_dir: Path, expected_episodes: Sequence[int]) -> None:
             sys.executable,
             str(verify_script),
             str(v3_dir),
+            "--source",
+            str(source_root),
             "--expect",
             ",".join(str(index) for index in expected_episodes),
         ],
@@ -246,7 +248,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         v3_dir = run_v3_export(data_dir, manifest_path, cameras)
 
         selected = pq.read_table(manifest_path).num_rows
-        run_verify(v3_dir, list(range(selected)))
+        source_root = data_dir / "_lerobot_cache" / prepared["dataset"]["revision"]
+        # The importer caches episodes, data and videos but not the task registry,
+        # which the round-trip check needs to resolve task_index to task strings.
+        _fetch_task_registry(
+            source_manifest["repository"], prepared["dataset"]["revision"], source_root
+        )
+        run_verify(v3_dir, list(range(selected)), source_root)
 
         resolved = prepared["dataset"]["revision"]
         archive_info = json.loads(

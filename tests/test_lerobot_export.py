@@ -1313,7 +1313,8 @@ def _export_real_video_fixture(tmp_path: Path, task_ids: tuple[int, int]) -> Pat
                     "-f",
                     "lavfi",
                     "-i",
-                    f"testsrc2=size=64x48:rate={info['fps']}",
+                    f"nullsrc=size=64x48:rate={info['fps']},"
+                    f"geq=lum='32+20*N+{60 * CAMS.index(camera)}':cb=96:cr=160",
                     "-frames:v",
                     "7",
                     "-c:v",

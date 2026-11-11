@@ -346,12 +346,21 @@ def test_workflow_end_to_end_on_small_fixture(tmp_path: Path, installed_fake_imp
     # Clean-process verifier accepts the export.
     verify_script = Path(__file__).resolve().parents[1] / "examples" / "lerobot" / "verify.py"
     proc = subprocess.run(
-        [sys.executable, str(verify_script), str(data_dir / "v3"), "--expect", "0,1,2"],
+        [
+            sys.executable,
+            str(verify_script),
+            str(data_dir / "v3"),
+            "--expect",
+            "0,1,2",
+            "--source",
+            str(data_dir / "_lerobot_cache" / REVISION),
+        ],
         capture_output=True,
         text=True,
     )
     assert proc.returncode == 0, proc.stderr
     assert "OK" in proc.stdout
+    assert "roundtrip: 3 episodes" in proc.stdout
 
 
 def test_workflow_runs_the_corpus_in_a_given_source_manifest(
